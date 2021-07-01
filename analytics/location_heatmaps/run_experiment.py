@@ -32,7 +32,7 @@ import geo_utils
 import mechanisms
 import metrics
 import plotting
-from analytics.location_heatmaps.sketches import get_count_min_sketch
+from sketches import get_count_min_sketch
 from config import Config
 
 TOPK = 1000
