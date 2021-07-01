@@ -32,6 +32,7 @@ import geo_utils
 import mechanisms
 import metrics
 import plotting
+from analytics.location_heatmaps.sketches import get_count_min_sketch
 from config import Config
 
 TOPK = 1000
@@ -104,7 +105,8 @@ def run_experiment(true_image,
                    positivity=False,
                    start_with_level=0,
                    ignore_start_eps=False,
-                   last_result_ci=None) -> List[geo_utils.AlgResult]:
+                   last_result_ci=None,
+                   count_min=False) -> List[geo_utils.AlgResult]:
   """The main method to run an experiment using TrieHH.
 
   Args:
@@ -130,6 +132,7 @@ def run_experiment(true_image,
       quantize: apply quantization to the vectors.
       noise_class: use specific noise, defaults to GeometricNoise.
       save_gif: saves all images as a gif.
+      count_min: use count-min sketch.
 
   Returns:
       A list of per level geo_utls.AlgResult objects.
@@ -179,6 +182,13 @@ def run_experiment(true_image,
     raise ValueError(
       'Specify either `collapse_threshold` or `collapse_func`.')
   samples = np.random.choice(dataset, level_sample_size, replace=False)
+  if count_min:
+    count_min_sketch = get_count_min_sketch(depth=20, width=2000)
+    sensitivity = 20
+  else:
+    count_min_sketch = None
+    sensitivity = 1
+
   for i in range(max_levels):
 
     samples_len = len(samples)
@@ -211,7 +221,7 @@ def run_experiment(true_image,
             f'{remaining_budget}', output_flag)
           eps = remaining_budget / samples_len
 
-      noiser = noise_class(dp_round_size, 1, eps)
+      noiser = noise_class(dp_round_size, sensitivity, eps)
       if ignore_start_eps and start_with_level <= i:
         print_output('Ignoring eps spent', flag=output_flag)
       else:
@@ -243,7 +253,7 @@ def run_experiment(true_image,
                                                prefix_len, dropout_rate,
                                                tree, tree_prefix_list,
                                                noiser, quantize, total_size,
-                                               positivity)
+                                               positivity, count_min=count_min_sketch)
 
     per_level_results.append(result)
     per_level_grid.append(grid_contour)

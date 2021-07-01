@@ -29,16 +29,6 @@ import numpy as np
 import pygtrie
 from tqdm import tqdm
 
-from sketches import CountMinSketch, hash_function
-
-
-# create count min sketch
-depth = 20
-width = 2000
-hash_functions = [hash_function(i) for i in range(depth)]
-sum_sketch = CountMinSketch(depth, width, hash_functions)
-
-
 DEFAULT_CHILDREN = ['00', '01', '10', '11']
 
 
@@ -139,10 +129,9 @@ def report_coordinate_to_vector(xy, tree, tree_prefix_list, count_min):
   path = coordinates_to_binary_path(xy)
   (sub_path, value) = tree.longest_prefix(path)
   if count_min:
-    sketch = CountMinSketch(depth, width, hash_functions)
-    sketch.add(sub_path)
+    count_min.add(sub_path)
     # print(sub_path, sketch.query(sub_path))
-    vector = sketch.get_matrix()
+    vector = count_min.get_matrix()
   else:
     vector = np.zeros([len(tree_prefix_list)])
 
@@ -225,7 +214,7 @@ def rebuild_from_vector(vector, tree, image_size, contour=False, threshold=0,
     neg_image = np.zeros([image_size, image_size])
   for path in sorted(tree):
     if count_min:
-      value = sum_sketch.query(path)
+      value = count_min.query(path)
     else:
       value = vector[tree[path]]
     (x, y, prefix_len, pos) = binary_path_to_coordinates(path)
@@ -269,7 +258,7 @@ def split_regions(tree_prefix_list,
                   positivity=False,
                   expand_all=False,
                   last_result: AlgResult = None,
-                  count_min=False):
+                  count_min=None):
   """Modify the tree by splitting and collapsing the nodes.
 
   This implementation collapses and splits nodes of the tree according to
@@ -355,7 +344,7 @@ def split_regions(tree_prefix_list,
         count = threshold + 1
       else:
         if count_min:
-          count = sum_sketch.query(tree_prefix_list[i])
+          count = count_min.query(tree_prefix_list[i])
         else:
           count = vector_counts[i]
       prefix = tree_prefix_list[i]
@@ -533,9 +522,9 @@ def make_step(samples, eps, threshold, partial,
               noiser, quantize, total_size, positivity, count_min):
   samples_len = len(samples)
   if count_min:
-    round_vector = np.zeros([partial, depth, width])
-    sum_sketch.M = np.zeros([depth, width], dtype=np.float64)
-    sum_vector = sum_sketch.get_matrix()
+    round_vector = np.zeros([partial, count_min.d, count_min.w])
+    count_min.M = np.zeros([count_min.d, count_min.w], dtype=np.float64)
+    sum_vector = count_min.get_matrix()
   else:
     round_vector = np.zeros([partial, prefix_len])
     sum_vector = np.zeros(prefix_len)
@@ -560,7 +549,7 @@ def make_step(samples, eps, threshold, partial,
         sum_vector += round_vector.sum(axis=0)
 
       if count_min:
-        round_vector = np.zeros([partial, depth, width])
+        round_vector = np.zeros([partial, count_min.d, count_min.w])
       else:
         round_vector = np.zeros([partial, prefix_len])
   del round_vector
