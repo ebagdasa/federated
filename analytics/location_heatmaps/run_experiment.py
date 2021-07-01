@@ -244,7 +244,7 @@ def run_experiment(true_image,
         vector_counts=None,
         threshold=threshold, image_bit_level=10,
         collapse_threshold=collapse_threshold, positivity=positivity,
-        expand_all=True)
+        expand_all=True, count_min=count_min)
       print_output(f"Expanding all at the level: {i}.", output_flag)
       continue
 
