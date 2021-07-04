@@ -111,12 +111,14 @@ def animate_gif(res):
   sub_runs = max([len(x.level_animation_list) for x in res])
   levels = len(res)
 
-  fig, ax = plt.subplots(1, 2, figsize=(20, 10))
-  for j in range(2):
-    disable_ticks(ax[j])
-    ax[j].imshow([[0]])
-    ax[j].set_title('_',fontdict = {'fontsize':22},loc='center')
-  # plt.tight_layout()
+  fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+
+  def init_func():
+    for j in range(2):
+      disable_ticks(ax[j])
+      ax[j].imshow([[0]])
+      ax[j].set_title('_',fontdict = {'fontsize':22},loc='center')
+    plt.tight_layout()
 
   def frame(w):
     level = w // sub_runs
@@ -138,8 +140,9 @@ def animate_gif(res):
                                        res[level].level_animation_list[-1].max())
     axis.imshow(res[level].level_animation_list[sub_run], norm=norm)
 
-  anim = animation.FuncAnimation(fig, frame, frames=levels * sub_runs,
+  anim = animation.FuncAnimation(fig, frame, frames=levels * sub_runs, init_func=init_func,
                                  blit=False, repeat=True)
+  plt.close()
 
   return anim
 
