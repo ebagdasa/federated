@@ -557,7 +557,7 @@ def make_step(samples, eps, threshold, partial,
       # save 10 frames for each run for animation
       if j % (samples_len//10) == 0 or j == samples_len - 1:
         test_image, _, _ = rebuild_from_vector(
-          np.copy(sum_vector), tree, image_size=total_size, threshold=threshold,
+          np.copy(sum_vector), tree, image_size=total_size, threshold=threshold if eps else 0.0,
           positivity=positivity, count_min=count_min)
         level_animation_list.append(test_image)
   del round_vector
