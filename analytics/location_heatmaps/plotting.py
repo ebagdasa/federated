@@ -96,6 +96,53 @@ def plot_f1_line(test_image, true_image, total_size, k=2):
   return
 
 
+def disable_ticks(ax):
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+
+def animate_gif(res):
+  from matplotlib import rc
+  rc('animation', html='jshtml')
+  import matplotlib.pyplot as plt
+  import matplotlib
+  import matplotlib.animation as animation
+
+  sub_runs = max([len(x.level_animation_list) for x in res])
+  levels = len(res)
+
+  fig, ax = plt.subplots(1, 2, figsize=(20, 10))
+  for j in range(2):
+    disable_ticks(ax[j])
+    ax[j].imshow([[0]])
+    ax[j].set_title('_',fontdict = {'fontsize':22},loc='center')
+  # plt.tight_layout()
+
+  def frame(w):
+    level = w // sub_runs
+    sub_run = w % sub_runs
+    if len(res[level].level_animation_list) <= sub_run:
+      print(f'due to dropout less reported data for level: {level}.')
+      return
+
+    if sub_run == 0:
+      ax[1].clear()
+      disable_ticks(ax[1])
+      ax[1].imshow(res[level].grid_contour)
+
+    axis = ax[0]
+    axis.set_title(f'Reports from {10000 * sub_run}/{10000 * sub_runs} users', fontdict = {'fontsize':12},loc='center')
+    axis.clear()
+    disable_ticks(axis)
+    norm = matplotlib.colors.Normalize(0,
+                                       res[level].level_animation_list[-1].max())
+    axis.imshow(res[level].level_animation_list[sub_run], norm=norm)
+
+  anim = animation.FuncAnimation(fig, frame, frames=levels * sub_runs,
+                                 blit=False, repeat=True)
+
+  return anim
+
 def save_gif(images: List[np.ndarray], path, gif_name='gif_map'):
   """Saves gif to path.
 

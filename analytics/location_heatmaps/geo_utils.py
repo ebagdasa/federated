@@ -69,6 +69,7 @@ class AlgResult:
   neg_image: np.ndarray = None
   metric: Any = None
   sampled_metric: Any = None
+  level_animation_list: List = None
 
 
 def coordinates_to_binary_path(xy_tuple, depth=10):
@@ -521,6 +522,7 @@ def make_step(samples, eps, threshold, partial,
               prefix_len, dropout_rate, tree, tree_prefix_list,
               noiser, quantize, total_size, positivity, count_min):
   samples_len = len(samples)
+  level_animation_list = list()
   if count_min:
     round_vector = np.zeros([partial, count_min.d, count_min.w])
     count_min.M = np.zeros([count_min.d, count_min.w], dtype=np.float64)
@@ -547,11 +549,17 @@ def make_step(samples, eps, threshold, partial,
           2 ** (quantize - 1))
       else:
         sum_vector += round_vector.sum(axis=0)
-
       if count_min:
         round_vector = np.zeros([partial, count_min.d, count_min.w])
       else:
         round_vector = np.zeros([partial, prefix_len])
+
+      # save 10 frames for each run for animation
+      if j % (samples_len//10) == 0 or j == samples_len - 1:
+        test_image, _, _ = rebuild_from_vector(
+          np.copy(sum_vector), tree, image_size=total_size, threshold=threshold,
+          positivity=positivity, count_min=count_min)
+        level_animation_list.append(test_image)
   del round_vector
   rebuilder = np.copy(sum_vector)
   if eps:
@@ -577,6 +585,7 @@ def make_step(samples, eps, threshold, partial,
     threshold=threshold,
     grid_contour=grid_contour,
     pos_image=pos_image,
+    level_animation_list=level_animation_list,
     neg_image=neg_image,
     eps=eps)
 
