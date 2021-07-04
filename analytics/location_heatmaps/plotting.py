@@ -111,7 +111,7 @@ def animate_gif(res):
   sub_runs = max([len(x.level_animation_list) for x in res])
   levels = len(res)
 
-  fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+  fig, ax = plt.subplots(2, 1, figsize=(8, 16))
 
   def init_func():
     for j in range(2):
@@ -133,7 +133,7 @@ def animate_gif(res):
       ax[1].imshow(res[level].grid_contour)
 
     axis = ax[0]
-    axis.set_title(f'Reports from {10000 * sub_run}/{10000 * sub_runs} users', fontdict = {'fontsize':12},loc='center')
+    ax[1].set_title(f'Reports from {10000 * sub_run}/{10000 * sub_runs} users', fontdict = {'fontsize':12},loc='center')
     axis.clear()
     disable_ticks(axis)
     norm = matplotlib.colors.Normalize(0,
