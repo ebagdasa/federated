@@ -69,7 +69,7 @@ def plot_it(ax, test_image, eps, total_regions, metric: metrics.Metrics):
                '\n' + f'MAAPE: {metric.maape:.3f}. ' +
                f'Mutual: {metric.mutual_info:.3f}.' + '\n' +
                f'MSE: {metric.mse:.2e}', fontsize=30)
-  ax.imshow(test_image, interpolation='bilinear')
+  ax.imshow(test_image, interpolation='gaussian')
   return
 
 
@@ -130,7 +130,7 @@ def animate_gif(res):
     if sub_run == 0:
       ax[1].clear()
       disable_ticks(ax[1])
-      ax[1].imshow(res[level].grid_contour)
+      ax[1].imshow(res[level].grid_contour, interpolation='gaussian')
 
     axis = ax[0]
     axis.set_title(f'Reports from {10000 * sub_run}/{10000 * sub_runs} users', fontdict = {'fontsize':12},loc='center')
@@ -138,7 +138,7 @@ def animate_gif(res):
     disable_ticks(axis)
     norm = matplotlib.colors.Normalize(0,
                                        res[level].level_animation_list[-1].max())
-    axis.imshow(res[level].level_animation_list[sub_run], norm=norm)
+    axis.imshow(res[level].level_animation_list[sub_run], norm=norm,  interpolation='gaussian')
 
   anim = animation.FuncAnimation(fig, frame, frames=levels * sub_runs, init_func=init_func,
                                  blit=False, repeat=True)
