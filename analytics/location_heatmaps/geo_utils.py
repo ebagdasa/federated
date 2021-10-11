@@ -23,7 +23,10 @@ on some level or a region on the lowest level.
 
 import dataclasses
 import random
+from collections import defaultdict
 from typing import List, Any
+
+import math
 
 import numpy as np
 import pygtrie
@@ -251,6 +254,9 @@ def rebuild_from_vector(vector, tree, image_size, contour=False, threshold=0,
   return current_image, pos_image, neg_image
 
 
+# c = 10, alpha=0.5
+
+
 def split_regions(tree_prefix_list,
                   vector_counts,
                   threshold,
@@ -371,14 +377,33 @@ def split_regions(tree_prefix_list,
             # print(last_prefix, prefix, last_prefix_pos, last_count, count, conf_int, cond)
       else:
         cond = count > threshold
-      # print(cond, threshold, count)
-      if cond:
-        for child in DEFAULT_CHILDREN:
-          new_prefix = f'{prefix}/{child}'
-          if not new_tree.has_key(new_prefix):
-            fresh_expand += 1
-            new_tree[new_prefix] = len(new_tree_prefix_list)
-            new_tree_prefix_list.append(new_prefix)
+        split_to = np.sqrt(max(count, 0) * (0.5) * 1/15) + 0.01
+
+        levels =  round(np.log2(split_to)) #- 1
+        if expand_all:
+          levels = 1
+        # print(cond, threshold, count, split_to, levels)
+      if levels > 0:
+        next_level_prefixes = defaultdict(list)
+        next_level_prefixes[0].append(prefix)
+        for i, level in enumerate(range(levels)):
+          for current_prefix in next_level_prefixes[i]:
+            for child in DEFAULT_CHILDREN:
+              # current_prefix = next_level_prefixes.get(i, {}).get(child, prefix)
+
+              new_prefix = f'{current_prefix}/{child}'
+              # print(i, level, child, current_prefix, new_prefix)
+
+              if not new_tree.has_key(new_prefix):
+                if i+1 == levels:
+                  fresh_expand += 1
+                  new_tree[new_prefix] = len(new_tree_prefix_list)
+                  new_tree_prefix_list.append(new_prefix)
+                  # current_prefix = prefix
+                  # print(f'expanded to : {new_prefix}')
+                else:
+                  next_level_prefixes[i+1].append(new_prefix)
+
       else:
         if collapse_threshold is not None and \
             count <= collapse_threshold and \
