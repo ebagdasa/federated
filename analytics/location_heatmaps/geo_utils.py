@@ -75,7 +75,7 @@ class AlgResult:
   level_animation_list: List = None
 
 
-def coordinates_to_binary_path(xy_tuple, depth=10):
+def coordinates_to_binary_path(xy_tuple, depth=10, tree_prefix_list=None):
   """Transform a coordinate tuple into a binary vector.
 
   We compute a binary version of the provided coordinate tuple,
@@ -88,6 +88,31 @@ def coordinates_to_binary_path(xy_tuple, depth=10):
   Returns:
     binary version of the coordinate.
   """
+  path = None
+  if tree_prefix_list:
+    x_coord, y_coord = xy_tuple
+    max_depth = max([len(x.split('/')) for x in tree_prefix_list])
+    for i in range(0, max_depth, 1):
+      # split 1,2,3/1,2,10 path
+      try:
+        candidates = [x for x in tree_prefix_list if (path is None or path in x) and len(x.split('/')) == i+1]
+        if len(candidates) == 0:
+          return path
+        split = int(candidates[0].split('/')[i].split(',')[-1])
+      except (IndexError, ValueError):
+        print(f'PATH: {path}, {i}, {tree_prefix_list}')
+        print([x for x in tree_prefix_list if len(x.split('/')) == i+1])
+        raise AttributeError
+      x = x_coord // split
+      y = y_coord // split
+      x_coord = x_coord % split
+      y_coord = y_coord % split
+      if path is None:
+        path = f'{x},{y},{split}'
+      else:
+        path += f'/{x},{y},{split}'
+    return path
+
   if len(xy_tuple) == 2:
     x_coord, y_coord = xy_tuple
     positivity = False
@@ -119,18 +144,16 @@ def binary_path_to_coordinates(path):
   pos = None
   splitted_path = path.split('/')
   for xy in splitted_path:
-    x = x << 1
-    y = y << 1
-    x += int(xy[0])
-    y += int(xy[1])
-    if len(xy) > 2:
-      pos = int(xy[2])
-  return x, y, len(splitted_path), pos
+    x_coord, y_coord, split = xy.split(',')
+    split = int(split)
+    x += int(x_coord) * split
+    y += int(y_coord) * split
+  return x, y, len(splitted_path), split
 
 
 def report_coordinate_to_vector(xy, tree, tree_prefix_list, count_min):
   """Converts a coordinate tuple into a one-hot vector using tree."""
-  path = coordinates_to_binary_path(xy)
+  path = coordinates_to_binary_path(xy, tree_prefix_list=tree_prefix_list)
   (sub_path, value) = tree.longest_prefix(path)
   if count_min:
     count_min.add(sub_path)
@@ -143,7 +166,7 @@ def report_coordinate_to_vector(xy, tree, tree_prefix_list, count_min):
   return vector
 
 
-def init_tree(positivity=False):
+def init_tree(positivity=False, initial_split=None, size=None):
   """Initializes tree to have four leaf nodes.
 
   Creates pgtrie with leafs from `DEFAULT_CHILDREN` and assigns each node
@@ -157,16 +180,25 @@ def init_tree(positivity=False):
   """
 
   new_tree = pygtrie.StringTrie()
+  if initial_split:
+    regions = size // initial_split + 1
+    children_list = list()
+    for x in range(regions):
+      for y in range(regions):
+        leaf = f'{x},{y},{initial_split}'
+        children_list.append(leaf)
+        new_tree[leaf] = x*regions + y
+    return new_tree, children_list
+  else:
+    for i, z in enumerate(get_default_children(positivity)):
+      new_tree[z] = i
+    return new_tree, list(get_default_children(positivity))
 
-  for i, z in enumerate(get_default_children(positivity)):
-    new_tree[z] = i
-  return new_tree, list(get_default_children(positivity))
 
-
-def transform_region_to_coordinates(x_coord,
-                                    y_coord,
-                                    prefix_len,
-                                    image_bit_level=10):
+def transform_region_to_coordinates(x_coord=None,
+                                    y_coord=None,
+                                    prefix_len=None,
+                                    image_bit_level=10, path=None):
   """Transforms (x,y)-bit region into a square for a final level.
 
   This method converts a leaf on some level `prefix_len` to a square region at
@@ -182,12 +214,14 @@ def transform_region_to_coordinates(x_coord,
   Returns:
     A square region coordinates.
   """
+  x_bot, x_top, y_bot, y_top = 0, 0, 0, 0
+  for xy in path.split('/'):
+    x_coord, y_coord, split = xy.split(',')
+    x_bot += int(x_coord) * int(split)
+    y_bot += int(y_coord) * int(split)
+    x_top = x_bot + int(split)
+    y_top = y_bot + int(split)
 
-  shift = image_bit_level - prefix_len
-  x_bot = x_coord << shift
-  x_top = ((x_coord + 1) << shift) - 1
-  y_bot = y_coord << shift
-  y_top = ((y_coord + 1) << shift) - 1
   return (x_bot, x_top, y_bot, y_top)
 
 
@@ -221,14 +255,14 @@ def rebuild_from_vector(vector, tree, image_size, contour=False, threshold=0,
       value = count_min.query(path)
     else:
       value = vector[tree[path]]
-    (x, y, prefix_len, pos) = binary_path_to_coordinates(path)
+    (x, y, prefix_len, split) = binary_path_to_coordinates(path)
     (x_bot, x_top, y_bot,
      y_top) = transform_region_to_coordinates(x, y, prefix_len,
-                                              image_bit_level)
+                                              image_bit_level, path)
 
     if value < threshold:
       value = 0
-    count = value / 2 ** (1 * (image_bit_level - prefix_len))
+    count = value/ (split)
 
     # Build a grid image without filling the regions.
     if contour:
@@ -243,14 +277,7 @@ def rebuild_from_vector(vector, tree, image_size, contour=False, threshold=0,
       x_top - max(1, 5 // prefix_len):x_top + 10 // prefix_len,
       y_bot:y_top + 1] = 1
     else:
-      current_image[x_bot:x_top + 1, y_bot:y_top + 1] += count
-      if positivity:
-        if pos == 1:
-          pos_image[x_bot:x_top + 1, y_bot:y_top + 1] = count
-        elif pos == 0:
-          neg_image[x_bot:x_top + 1, y_bot:y_top + 1] = count
-        else:
-          raise ValueError(f'value: {pos}')
+      current_image[x_bot:x_top + 1, y_bot:y_top + 1] = count
   return current_image, pos_image, neg_image
 
 
@@ -375,50 +402,40 @@ def split_regions(tree_prefix_list,
             cond = conf_int < threshold
             intervals.append(conf_int)
             # print(last_prefix, prefix, last_prefix_pos, last_count, count, conf_int, cond)
+      elif expand_all:
+          for child in DEFAULT_CHILDREN:
+            # current_prefix = next_level_prefixes.get(i, {}).get(child, prefix)
+
+            new_prefix = f'{prefix}/{child}'
+            new_tree[new_prefix] = len(new_tree_prefix_list)
+            new_tree_prefix_list.append(new_prefix)
+            print(f'Expand all, added {image_bit_level}: {new_prefix}')
       else:
-        cond = count > threshold
-        split_to = np.sqrt(max(count, 0) * (0.5) * 1/15) + 0.01
-
-        levels =  round(np.log2(split_to)) #- 1
-        if expand_all:
-          levels = 1
-        # print(cond, threshold, count, split_to, levels)
-      if levels > 0:
-        next_level_prefixes = defaultdict(list)
-        next_level_prefixes[0].append(prefix)
-        for i, level in enumerate(range(levels)):
-          for current_prefix in next_level_prefixes[i]:
-            for child in DEFAULT_CHILDREN:
-              # current_prefix = next_level_prefixes.get(i, {}).get(child, prefix)
-
-              new_prefix = f'{current_prefix}/{child}'
-              # print(i, level, child, current_prefix, new_prefix)
-
-              if not new_tree.has_key(new_prefix):
-                if i+1 == levels:
-                  fresh_expand += 1
-                  new_tree[new_prefix] = len(new_tree_prefix_list)
-                  new_tree_prefix_list.append(new_prefix)
-                  # current_prefix = prefix
-                  # print(f'expanded to : {new_prefix}')
-                else:
-                  next_level_prefixes[i+1].append(new_prefix)
-
-      else:
-        if collapse_threshold is not None and \
-            count <= collapse_threshold and \
-            len(prefix) > 2:
-
-          old_prefix = prefix[:-3]
-          collapsed += 1
-          if not new_tree.has_key(old_prefix):
-            created += 1
-            new_tree[old_prefix] = len(new_tree_prefix_list)
-            new_tree_prefix_list.append(old_prefix)
+        split_to = round(np.sqrt(max(count, 0) * (0.5) * 1/15) + 0.01)
+        if split_to > 1:
+          last_region_size = int(prefix.split(',')[-1])
+          region_size = max(1, 1 + last_region_size // split_to)
+          for spl_x in range(split_to):
+            for spl_y in range(split_to):
+              fresh_expand += 1
+              new_prefix = f'{prefix}/{spl_x},{spl_y},{region_size}'
+              new_tree[new_prefix] = len(new_tree_prefix_list)
+              new_tree_prefix_list.append(new_prefix)
         else:
-          unchanged += 1
-          new_tree[f'{prefix}'] = len(new_tree_prefix_list)
-          new_tree_prefix_list.append(f'{prefix}')
+          if collapse_threshold is not None and \
+              count <= collapse_threshold and \
+              len(prefix) > 2:
+
+            old_prefix = prefix[:-3]
+            collapsed += 1
+            if not new_tree.has_key(old_prefix):
+              created += 1
+              new_tree[old_prefix] = len(new_tree_prefix_list)
+              new_tree_prefix_list.append(old_prefix)
+          else:
+            unchanged += 1
+            new_tree[f'{prefix}'] = len(new_tree_prefix_list)
+            new_tree_prefix_list.append(f'{prefix}')
   finished = False
   # print(f'Conf int {np.mean(intervals) if len(intervals) else 0}.')
   # if collapse_threshold:
@@ -580,11 +597,11 @@ def make_step(samples, eps, threshold, partial,
         round_vector = np.zeros([partial, prefix_len])
 
       # save 10 frames for each run for animation
-      if j % (samples_len//10) == 0 or j == samples_len - 1:
-        test_image, _, _ = rebuild_from_vector(
-          np.copy(sum_vector), tree, image_size=total_size, threshold=threshold if eps else -1,
-          positivity=positivity, count_min=count_min)
-        level_animation_list.append(test_image)
+      # if j % (samples_len//10) == 0 or j == samples_len - 1:
+      #   test_image, _, _ = rebuild_from_vector(
+      #     np.copy(sum_vector), tree, image_size=total_size, threshold=threshold if eps else -1,
+      #     positivity=positivity, count_min=count_min)
+      #   level_animation_list.append(test_image)
   del round_vector
   rebuilder = np.copy(sum_vector)
   if eps:

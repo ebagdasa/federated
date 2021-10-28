@@ -106,7 +106,8 @@ def run_experiment(true_image,
                    start_with_level=0,
                    ignore_start_eps=False,
                    last_result_ci=None,
-                   count_min=False) -> List[geo_utils.AlgResult]:
+                   count_min=False,
+                   initial_split=None) -> List[geo_utils.AlgResult]:
   """The main method to run an experiment using TrieHH.
 
   Args:
@@ -160,7 +161,7 @@ def run_experiment(true_image,
                   positivity=positivity,
                   start_with_level=start_with_level)
 
-  tree, tree_prefix_list = geo_utils.init_tree(positivity)
+  tree, tree_prefix_list = geo_utils.init_tree(positivity, initial_split, TOTAL_SIZE)
   per_level_results = list()
   per_level_grid = list()
   finished = False
