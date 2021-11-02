@@ -240,14 +240,23 @@ def rebuild_from_vector(vector, tree, image_size, contour=False, threshold=0,
       x_top - max(1, 5 // prefix_len):x_top + 10 // prefix_len,
       y_bot:y_top + 1] = 1
     else:
-      current_image[x_bot:x_top + 1, y_bot:y_top + 1] += count
+      # balance for collapsing
+      depth = len(path.split('/'))
+      keys = tree.keys(path)[1:]
+      if len(keys) > 1:
+        for key in keys:
+          sub_node_depth = len(key.split('/')) - depth
+          scale = 4**sub_node_depth/ (4**sub_node_depth-1)
+          count *= scale
+
+      current_image[x_bot:x_top + 1, y_bot:y_top + 1] = count
       if positivity:
         if pos == 1:
           pos_image[x_bot:x_top + 1, y_bot:y_top + 1] = count
         elif pos == 0:
           neg_image[x_bot:x_top + 1, y_bot:y_top + 1] = count
         else:
-          raise ValueError(f'value: {pos}')
+          raise ValueError(f'Not supported: {pos}')
   return current_image, pos_image, neg_image
 
 
