@@ -23,13 +23,14 @@ on some level or a region on the lowest level.
 
 import dataclasses
 import random
+from collections import defaultdict
 from typing import List, Any
 from scipy.stats import norm
 
 import numpy as np
 import pygtrie
 from tqdm import tqdm
-
+MAX_DEPTH=6
 DEFAULT_CHILDREN = ['00', '01', '10', '11']
 
 
@@ -82,7 +83,7 @@ class AlgResult:
   level_animation_list: List = None
 
 
-def coordinates_to_binary_path(xy_tuple, depth=10):
+def coordinates_to_binary_path(xy_tuple, depth=MAX_DEPTH):
   """Transform a coordinate tuple into a binary vector.
 
   We compute a binary version of the provided coordinate tuple,
@@ -137,16 +138,30 @@ def binary_path_to_coordinates(path):
 
 def report_coordinate_to_vector(xy, tree, tree_prefix_list, count_min):
   """Converts a coordinate tuple into a one-hot vector using tree."""
-  path = coordinates_to_binary_path(xy)
-  (sub_path, value) = tree.longest_prefix(path)
-  if count_min:
-    count_min.add(sub_path)
-    # print(sub_path, sketch.query(sub_path))
-    vector = count_min.get_matrix()
+  if isinstance(xy, np.void):
+    path = coordinates_to_binary_path(xy)
+    (sub_path, value) = tree.longest_prefix(path)
+    if count_min:
+      count_min.add(sub_path)
+      # print(sub_path, sketch.query(sub_path))
+      vector = count_min.get_matrix()
+    else:
+      vector = np.zeros([len(tree_prefix_list)])
+
+      vector[value] += 1
   else:
     vector = np.zeros([len(tree_prefix_list)])
+    for xy_single in xy:
+      path = coordinates_to_binary_path(xy_single)
+      (sub_path, value) = tree.longest_prefix(path)
+      vector[value] += 1
+      # print(xy_single, path, vector)
+    vector /= vector.sum()
+  # vector2 = np.zeros([len(tree_prefix_list)])
+  # vector2[vector.argmax()] = 1.0
+  # vector = vector2
+    # print(vector)
 
-    vector[value] += 1
   return vector
 
 
@@ -173,7 +188,7 @@ def init_tree(aux_data=False):
 def transform_region_to_coordinates(x_coord,
                                     y_coord,
                                     prefix_len,
-                                    image_bit_level=10):
+                                    image_bit_level=MAX_DEPTH):
   """Transforms (x,y)-bit region into a square for a final level.
 
   This method converts a leaf on some level `prefix_len` to a square region at
@@ -325,14 +340,14 @@ def split_regions(tree_prefix_list,
     if count_min:
       count = count_min.query(tree_prefix_list[i])
     else:
-      count = vector_counts[i] if vector_counts else np.inf
+      count = vector_counts[i] if vector_counts is not None else np.inf
     prefix = tree_prefix_list[i]
 
     # check whether the tree has reached the bottom
     if len(prefix.split('/')) >= image_bit_level:
       continue
     if last_result:
-      cond = create_confidence_interval_condition(last_result, prefix, count,
+      cond = evaluate_confidence_interval_condition(last_result, prefix, count,
                                                   split_threshold)
     else:
       cond = count > split_threshold
@@ -397,9 +412,9 @@ def split_regions_aux(tree_prefix_list,
     if len(pos_prefix.split('/')) >= image_bit_level:
       continue
     if last_result:
-      p_cond = create_confidence_interval_condition(last_result, pos_prefix,
+      p_cond = evaluate_confidence_interval_condition(last_result, pos_prefix,
                                                     pos_count, split_threshold)
-      n_cond = create_confidence_interval_condition(last_result, neg_prefix,
+      n_cond = evaluate_confidence_interval_condition(last_result, neg_prefix,
                                                     neg_count, split_threshold)
       cond = p_cond and n_cond
     else:
@@ -449,6 +464,7 @@ def quantize_vector(vector, left_bound, right_bound):
   distance = (right_bound - left_bound)
   scale = (vector - left_bound) // distance
   vector -= distance * scale
+  # print('Scale', [scale==0].sum())
   return vector
 
 
@@ -491,6 +507,14 @@ def make_gaussian(image, total_size, fwhm=3, center=None,
   else:
     return dict(mask=hotspot, pos_image=pos_image, neg_image=neg_image)
 
+
+def make_user_dataset(data_list):
+  dataset = defaultdict(list)
+  z = 0
+  for user, x, y in data_list:
+    dataset[user].append((x,y))
+
+  return list(dataset.values())
 
 def convert_to_dataset(image, total_size, value=None):
   if value is not None:
@@ -599,10 +623,19 @@ def make_step(samples, eps, split_threshold, partial,
       continue
     round_vector[j % partial] = report_coordinate_to_vector(
       sample, tree, tree_prefix_list, count_min)
-    if j % partial == 0 or j == samples_len - 1:
+    if j > 0 and j % partial == 0 or j == samples_len - 1:
+      round_vector *= noiser.gamma
+      round_vector_ceil = np.ceil(round_vector)
+      round_vector_floor = np.floor(round_vector)
+      random_vector = np.random.random(round_vector.shape) >= (round_vector_ceil - round_vector)
+      # print('a', round_vector)
+      round_vector = (random_vector) * (round_vector_ceil) + (1-random_vector) * round_vector_floor
+      # print('b', round_vector)
+      round_vector = round_vector.astype(np.int64)
+      # print('c', round_vector)
       round_vector = noiser.apply_noise(round_vector)
+      # print('b', round_vector)
       if quantize is not None:
-
         round_vector = quantize_vector(round_vector,
                                        -2 ** (
                                            quantize - 1),
@@ -612,7 +645,8 @@ def make_step(samples, eps, split_threshold, partial,
           round_vector.sum(axis=0), -2 ** (quantize - 1),
           2 ** (quantize - 1))
       else:
-        sum_vector += round_vector.sum(axis=0)
+        # print(round_vector)
+        sum_vector += round_vector.sum(axis=0)/noiser.gamma
       if count_min:
         round_vector = np.zeros([partial, count_min.d, count_min.w])
       else:

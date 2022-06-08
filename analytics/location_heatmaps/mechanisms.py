@@ -22,6 +22,9 @@ from scipy import optimize
 
 class NoiseAddition(abc.ABC):
   """Base class for different DP mechanisms."""
+  differential_privacy_sensitivity = 1.0
+  input_width = 0.0
+  gamma = 1.0
 
   @abc.abstractmethod
   def _get_noise_tensor(self, input_shape):
@@ -59,15 +62,16 @@ class ZeroNoise(NoiseAddition):
 
 class GeometricNoise(NoiseAddition):
   """Geometric distributed DP noise.
-
+  gamma = 1.0
   This approach implements the Distributed Geometric Mechanism.
   """
 
   def __init__(self, num_clients, differential_privacy_sensitivity,
-               differential_privacy_epsilon):
+               differential_privacy_epsilon, gamma):
     self.num_clients = num_clients
     self.differential_privacy_sensitivity = differential_privacy_sensitivity
     self.differential_privacy_epsilon = differential_privacy_epsilon
+    self.gamma = gamma
     self.r = np.exp(-self.differential_privacy_epsilon /
                     self.differential_privacy_sensitivity)
 
@@ -86,13 +90,13 @@ class GeometricNoise(NoiseAddition):
     beta = (1 - self.r) / self.r
 
     gamma1 = tf.random.gamma(
-      shape=input_shape, alpha=alpha, beta=beta, dtype=tf.dtypes.float16)
+      shape=input_shape, alpha=alpha, beta=beta, dtype=tf.dtypes.float64)
     gamma2 = tf.random.gamma(
-      shape=input_shape, alpha=alpha, beta=beta, dtype=tf.dtypes.float16)
-    polya1 = tf.random.poisson(shape=[1], lam=gamma1, dtype=tf.dtypes.int32)
-    polya2 = tf.random.poisson(shape=[1], lam=gamma2, dtype=tf.dtypes.int32)
+      shape=input_shape, alpha=alpha, beta=beta, dtype=tf.dtypes.float64)
+    polya1 = tf.random.poisson(shape=[1], lam=gamma1, dtype=tf.dtypes.int64)
+    polya2 = tf.random.poisson(shape=[1], lam=gamma2, dtype=tf.dtypes.int64)
     client_noise = tf.reshape(tf.subtract(polya1, polya2), input_shape)
-    return client_noise.numpy()
+    return client_noise.numpy().astype(np.int64)
 
 
 class RapporNoise(NoiseAddition):

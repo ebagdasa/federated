@@ -102,7 +102,8 @@ def run_experiment(true_image,
                    start_with_level=0,
                    ignore_start_eps=False,
                    last_result_ci=None,
-                   count_min=None) -> List[geo_utils.AlgResult]:
+                   count_min=None,
+                   sensitivity=1.0) -> List[geo_utils.AlgResult]:
   """ The main method to run the experiments.
 
   Args:
@@ -186,10 +187,8 @@ def run_experiment(true_image,
   samples = np.random.choice(dataset, config.level_sample_size, replace=False)
   if count_min is not None:
     count_min_sketch = CountMinSketch(depth=count_min['depth'], width=count_min['width'])
-    sensitivity = 20
   else:
     count_min_sketch = None
-    sensitivity = 1
 
   for i in range(config.max_levels):
     samples_len = len(samples)
@@ -222,7 +221,8 @@ def run_experiment(true_image,
             f'{remaining_budget}', output_flag)
           eps = remaining_budget / samples_len
 
-      noiser = noise_class(dp_round_size, sensitivity, eps)
+      noiser = noise_class(dp_round_size, sensitivity + prefix_len, eps, gamma=sensitivity)
+      print('New sensitivity', sensitivity + prefix_len)
       if ignore_start_eps and start_with_level <= i:
         print_output('Ignoring eps spent', flag=output_flag)
         spent_budget = 0
